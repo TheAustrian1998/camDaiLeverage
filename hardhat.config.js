@@ -1,4 +1,5 @@
 require("@nomiclabs/hardhat-waffle");
+require("hardhat-gas-reporter");
 
 let { rpc } = require("./secrets.json");
 
@@ -22,6 +23,9 @@ module.exports = {
     localhost: {
       url: "http://localhost:8545",
       timeout: 2000000000
+    },
+    polygon: {
+      url: rpc
     }
   }
 };
