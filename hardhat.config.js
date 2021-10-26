@@ -27,5 +27,8 @@ module.exports = {
     polygon: {
       url: rpc
     }
+  },
+  gasReporter: {
+    excludeContracts: ["ERC20.sol"]
   }
 };

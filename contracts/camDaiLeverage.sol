@@ -92,11 +92,10 @@ contract camDaiLeverage is Ownable {
         }
     }
 
-    function doRulo(uint amount, uint loopTimes) external onlyOwner {
-        require(loopTimes <= 10, "dont be greedy");
+    function doRulo(uint amount) external onlyOwner {
         DAI.transferFrom(msg.sender, address(this), amount);
         
-        for (uint256 i = 0; i < loopTimes - 1; i++) {
+        for (uint256 i = 0; i < 10 - 1; i++) {
             _doRulo(false);
         }
         _doRulo(true);
@@ -148,6 +147,10 @@ contract camDaiLeverage is Ownable {
 
     function getVaultDebt() public view returns (uint256) {
         return vault.vaultDebt(vaultID);
+    }
+
+    function getCollateralPercentage() public view returns (uint256) {
+        return vault.checkCollateralPercentage(vaultID);
     }
 
 }
