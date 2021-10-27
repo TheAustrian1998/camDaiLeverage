@@ -1,7 +1,8 @@
 require("@nomiclabs/hardhat-waffle");
+require("@nomiclabs/hardhat-etherscan");
 require("hardhat-gas-reporter");
 
-let { rpc } = require("./secrets.json");
+let { rpc, apiKey } = require("./secrets.json");
 
 module.exports = {
   solidity: {
@@ -27,6 +28,9 @@ module.exports = {
     polygon: {
       url: rpc
     }
+  },
+  etherscan: {
+    apiKey: apiKey
   },
   gasReporter: {
     excludeContracts: ["ERC20.sol"]

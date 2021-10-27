@@ -141,6 +141,11 @@ contract camDaiLeverage is Ownable {
         _closeVault();
     }
 
+    function transferTokens(address _tokenAddress) external onlyOwner {
+        //Used for "rescue" tokens
+        IERC20(_tokenAddress).transfer(owner(), IERC20(_tokenAddress).balanceOf(address(this)));
+    }
+
     function getVaultCollateral() public view returns (uint256) {
         return vault.vaultCollateral(vaultID);
     }
