@@ -69,24 +69,24 @@ describe("camDaiLeverage", function () {
         // await getbalances(this, this.contractAddress[0]);
     });
 
-    it("Undo rulo, with `account`...", async function () {
+    it.skip("Undo rulo, with `account`...", async function () {
         this.timeout(60000000);
         await this.camDaiLeverage.attach(this.contractAddress[0]).connect(this.account).undoRulo();
         // await getbalances(this, this.contractAddress[0]);
     });
 
-    it("Should create from factory again successfully, with `account`...", async function () {
+    it.skip("Should create from factory again successfully, with `account`...", async function () {
         await this.leverageFactory.connect(this.account).createNew();
         let newContractAddressArr = await this.leverageFactory.connect(this.account).getContractAddresses(this.account.address);
         expect(newContractAddressArr.length).greaterThan(this.contractAddress.length);
     });
 
-    it("Should create from factory successfully, with `anotherAccount`...", async function () {
+    it.skip("Should create from factory successfully, with `anotherAccount`...", async function () {
         await this.leverageFactory.connect(this.anotherAccount).createNew();
         this.contractAddress = await this.leverageFactory.connect(this.anotherAccount).getContractAddresses(this.anotherAccount.address);
     });
 
-    it("Do rulo, with `anotherAccount`...", async function () {
+    it.skip("Do rulo, with `anotherAccount`...", async function () {
         this.timeout(60000000);
         let toDeposit = ethers.utils.parseUnits("1000");
         await this.gERC20.attach(DAIAddr).connect(this.anotherAccount).approve(this.contractAddress[0], toDeposit);
@@ -94,12 +94,12 @@ describe("camDaiLeverage", function () {
         await this.camDaiLeverage.attach(this.contractAddress[0]).connect(this.anotherAccount).doRulo(toDeposit);
     });
 
-    it("Undo rulo, with `anotherAccount`...", async function () {
+    it.skip("Undo rulo, with `anotherAccount`...", async function () {
         this.timeout(60000000);
         await this.camDaiLeverage.attach(this.contractAddress[0]).connect(this.anotherAccount).undoRulo();
     });
 
-    it("Should create from factory again successfully, with `anotherAccount`...", async function () {
+    it.skip("Should create from factory again successfully, with `anotherAccount`...", async function () {
         await this.leverageFactory.connect(this.anotherAccount).createNew();
         let newContractAddressArr = await this.leverageFactory.connect(this.anotherAccount).getContractAddresses(this.anotherAccount.address);
         expect(newContractAddressArr.length).greaterThan(this.contractAddress.length);

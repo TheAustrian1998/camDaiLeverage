@@ -14,4 +14,9 @@ interface IQuickswapV2Router02 {
         external
         view
         returns (uint256[] memory amounts);
+
+    function getAmountsIn(uint256 amountOut, address[] memory path)
+        external
+        view
+        returns (uint256[] memory amounts);
 }

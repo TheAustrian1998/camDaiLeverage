@@ -67,9 +67,32 @@ contract camDaiLeverage is Ownable, IUniswapV2Callee {
         uint amount1Out = address(tokenA) == token1 ? amountA : amountB;
 
         // need to pass some data to trigger uniswapV2Call
-        bytes memory data = abi.encode(address(tokenA), address(tokenA), amount0Out, amount1Out, _type);
+        bytes memory data = abi.encode(token0, token1, _type);
 
         IUniswapV2Pair(pair).swap(amount0Out, amount1Out, address(this), data);
+    }
+
+    function _calculateFlashLoanFee(uint flashAmount) internal pure returns (uint, uint) {
+        if (flashAmount == 0) {
+            return (0, 0);
+        }
+        // about 0.3% (using 0.4% preventing shortage)
+        uint fee = ((flashAmount * 3) / 997) + 1;
+        uint amountToRepay = flashAmount + fee;
+        return (amountToRepay, fee); // (flashAmount + fee, fee)
+    }
+
+    function _getAmountsIn(uint amountOut, IERC20 _in, IERC20 _out) internal view returns (uint) {
+        address[] memory path = new address[](2);
+        path[0] = address(_in);
+        path[1] = address(_out);
+
+        uint256[] memory amountsIn = QuickswapV2Router02.getAmountsIn(
+            amountOut,
+            path
+        );
+
+        return amountsIn[0];
     }
 
     function _swap(IERC20 _in, IERC20 _out) internal {
@@ -97,20 +120,22 @@ contract camDaiLeverage is Ownable, IUniswapV2Callee {
                 block.timestamp
             );
         }
+
     }
 
-    function _doRulo(uint feeA) internal {
+    function _doRuloInternal(uint feeA) internal {
         address thisContract = address(this);
-        AAVE.deposit(address(DAI), DAI.balanceOf(thisContract), thisContract, 0);
+        uint totalCollateral = DAI.balanceOf(thisContract);
+        AAVE.deposit(address(DAI), totalCollateral, thisContract, 0);
         camDAI.enter(amDAI.balanceOf(thisContract));
         uint toDeposit = camDAI.balanceOf(thisContract);
-        vault.depositCollateral(vaultID, toDeposit - feeA);
-        uint toBorrow = (toDeposit / (vault._minimumCollateralPercentage() + 10)) * 100; //10% secure
-        vault.borrowToken(vaultID, toBorrow + feeA);
+        vault.depositCollateral(vaultID, toDeposit);
+        uint toBorrow = (totalCollateral / (vault._minimumCollateralPercentage() + 10)) * 100; //10% secure
+        vault.borrowToken(vaultID, _getAmountsIn(toBorrow + feeA, MAI, DAI));
         _swap(MAI, DAI);
     }
 
-    function _undoRulo(uint feeA) internal {
+    function _undoRuloInternal(uint feeA) internal {
         address thisContract = address(this);
 
         uint debt = getVaultDebt();
@@ -123,13 +148,6 @@ contract camDaiLeverage is Ownable, IUniswapV2Callee {
         }
     }
 
-    function _closeVault() internal {
-        //Close position, send DAI to owner
-        address thisContract = address(this);
-        _swap(MAI, DAI);
-        DAI.transfer(owner(), DAI.balanceOf(thisContract));
-    }
-
     function doRulo(uint amount) external onlyOwner {
         DAI.transferFrom(msg.sender, address(this), amount);
         uint optimalAmount = (amount * 100) / ((vault._minimumCollateralPercentage() + 10) - 100);
@@ -140,7 +158,10 @@ contract camDaiLeverage is Ownable, IUniswapV2Callee {
     function undoRulo() external onlyOwner {
         require(getVaultDebt() > 0, "there is no rulo to undo");
         _triggerFlash(MAI, USDC, getVaultDebt(), 0, 1);
-        _closeVault();
+        //Close position, send DAI to owner
+        address thisContract = address(this);
+        _swap(MAI, DAI);
+        DAI.transfer(owner(), DAI.balanceOf(thisContract));
     }
 
     function transferTokens(address _tokenAddress) external onlyOwner {
@@ -168,22 +189,19 @@ contract camDaiLeverage is Ownable, IUniswapV2Callee {
         require(msg.sender == pair, "!pair");
         require(_sender == address(this), "!sender");
 
-        (address tokenA, address tokenB, uint amountA, uint amountB, uint _type) = abi.decode(_data, (address, address, uint, uint, uint));
+        (address tokenA, address tokenB, uint _type) = abi.decode(_data, (address, address, uint));
 
-        // about 0.3% (using 0.4% preventing shortage)
-        uint feeA = ((amountA * 4) / 997) + 1;
-        uint amountToRepayA = amountA + feeA;
+        (uint amountToRepayA, uint feeA) = _calculateFlashLoanFee(_amount0);
+        (uint amountToRepayB, uint feeB) = _calculateFlashLoanFee(_amount1);
 
-        // about 0.3% (using 0.4% preventing shortage)
-        uint feeB = ((amountB * 4) / 997) + 1;
-        uint amountToRepayB = amountB + feeB;
+        uint fee = feeB == 0 ? feeA : feeB;
 
-        //0 -> _doRulo
-        //1 -> _undoRulo
+        //0 -> _doRuloInternal
+        //1 -> _undoRuloInternal
         if (_type == 0) {
-            _doRulo(feeA);
+            _doRuloInternal(fee);
         }else{
-            _undoRulo(feeA);
+            _undoRuloInternal(fee);
         }
 
         IERC20(tokenA).transfer(pair, amountToRepayA);
