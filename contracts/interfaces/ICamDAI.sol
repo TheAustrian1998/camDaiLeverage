@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-interface IcamDAI {
+interface ICamDAI {
     function approve(address spender, uint256 amount) external returns (bool);
     function enter(uint256 _amount) external;
     function leave(uint256 _share) external;

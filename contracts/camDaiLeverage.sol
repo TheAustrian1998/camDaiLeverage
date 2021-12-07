@@ -2,13 +2,12 @@
 pragma solidity ^0.8.0;
 
 import "./interfaces/IAAVE.sol";
-import "./interfaces/IcamDAI.sol";
+import "./interfaces/ICamDAI.sol";
 import "./interfaces/IVault.sol";
 import "./interfaces/IQuickswapV2Router02.sol";
 import "./interfaces/IUniswapV2Callee.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "hardhat/console.sol";
 
 contract LeverageFactory {
 
@@ -33,7 +32,7 @@ contract camDaiLeverage is Ownable, IUniswapV2Callee {
     IERC20 private amDAI = IERC20(0x27F8D03b3a2196956ED754baDc28D73be8830A6e);
     IERC20 private MAI = IERC20(0xa3Fa99A148fA48D14Ed51d610c367C61876997F1);
     IERC20 private USDC = IERC20(0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174);
-    IcamDAI private camDAI = IcamDAI(0xE6C23289Ba5A9F0Ef31b8EB36241D5c800889b7b);
+    ICamDAI private camDAI = ICamDAI(0xE6C23289Ba5A9F0Ef31b8EB36241D5c800889b7b);
 
     IAAVE private AAVE = IAAVE(0x8dFf5E27EA6b7AC08EbFdf9eB090F32ee9a30fcf);
     IVault private vault = IVault(0xD2FE44055b5C874feE029119f70336447c8e8827);
@@ -76,13 +75,21 @@ contract camDaiLeverage is Ownable, IUniswapV2Callee {
         if (flashAmount == 0) {
             return (0, 0);
         }
-        // about 0.3% (using 0.4% preventing shortage)
+        // about 0.3%
         uint fee = ((flashAmount * 3) / 997) + 1;
         uint amountToRepay = flashAmount + fee;
         return (amountToRepay, fee); // (flashAmount + fee, fee)
     }
 
+    function _calculateOnePercent(uint amount) internal pure returns (uint) {
+        //Return 1% of amount
+        uint _100 = 100e18;
+        uint _1 = 1e18;
+        return ((amount * _1) / _100);
+    }
+
     function _getAmountsIn(uint amountOut, IERC20 _in, IERC20 _out) internal view returns (uint) {
+        //Calculate how much `_in` do you need for receiving an specified amount of `_out`
         address[] memory path = new address[](2);
         path[0] = address(_in);
         path[1] = address(_out);
@@ -109,7 +116,7 @@ contract camDaiLeverage is Ownable, IUniswapV2Callee {
                 path
             );
 
-            uint256 minAmount = amountsOut[1] - ((amountsOut[1] * 1) / 100); // 1% slippage
+            uint256 minAmount = amountsOut[1] - _calculateOnePercent(amountsOut[1]); // 1% slippage
             address receiver = address(this);
 
             QuickswapV2Router02.swapExactTokensForTokens(
@@ -131,16 +138,17 @@ contract camDaiLeverage is Ownable, IUniswapV2Callee {
         uint toDeposit = camDAI.balanceOf(thisContract);
         vault.depositCollateral(vaultID, toDeposit);
         uint toBorrow = (totalCollateral / (vault._minimumCollateralPercentage() + 10)) * 100; //10% secure
-        vault.borrowToken(vaultID, _getAmountsIn(toBorrow + feeA, MAI, DAI));
+        uint enoughAmount = _getAmountsIn(toBorrow + feeA, MAI, DAI); //Borrow enough MAI to not be short
+        vault.borrowToken(vaultID, enoughAmount + _calculateOnePercent(enoughAmount)); //Borrow 1% cause slippage o the next line
         _swap(MAI, DAI);
     }
 
-    function _undoRuloInternal(uint feeA) internal {
+    function _undoRuloInternal() internal {
         address thisContract = address(this);
 
         uint debt = getVaultDebt();
         if (debt != 0) {
-            vault.payBackToken(vaultID, getVaultDebt());
+            vault.payBackToken(vaultID, debt);
             vault.withdrawCollateral(vaultID, getVaultCollateral());
             camDAI.leave(camDAI.balanceOf(thisContract));
             AAVE.withdraw(address(DAI), max, thisContract);
@@ -150,7 +158,7 @@ contract camDaiLeverage is Ownable, IUniswapV2Callee {
 
     function doRulo(uint amount) external onlyOwner {
         DAI.transferFrom(msg.sender, address(this), amount);
-        uint optimalAmount = (amount * 100) / ((vault._minimumCollateralPercentage() + 10) - 100);
+        uint optimalAmount = (amount * 100) / ((vault._minimumCollateralPercentage() + 10) - 100); //Optimal amount formula: see calc.py
         require(optimalAmount <= vault.getDebtCeiling(), "!debtCeiling");
         _triggerFlash(DAI, USDC, optimalAmount, 0, 0);
     }
@@ -159,9 +167,9 @@ contract camDaiLeverage is Ownable, IUniswapV2Callee {
         require(getVaultDebt() > 0, "there is no rulo to undo");
         _triggerFlash(MAI, USDC, getVaultDebt(), 0, 1);
         //Close position, send DAI to owner
-        address thisContract = address(this);
-        _swap(MAI, DAI);
-        DAI.transfer(owner(), DAI.balanceOf(thisContract));
+        _swap(MAI, DAI); // !! can be optimized
+        DAI.transfer(owner(), DAI.balanceOf(address(this)));
+        MAI.transfer(owner(), MAI.balanceOf(address(this)));
     }
 
     function transferTokens(address _tokenAddress) external onlyOwner {
@@ -201,7 +209,7 @@ contract camDaiLeverage is Ownable, IUniswapV2Callee {
         if (_type == 0) {
             _doRuloInternal(fee);
         }else{
-            _undoRuloInternal(fee);
+            _undoRuloInternal();
         }
 
         IERC20(tokenA).transfer(pair, amountToRepayA);
