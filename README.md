@@ -8,12 +8,13 @@ A tool for leveraging DAI yield in AAVE using QiDao Protocol, in Polygon Network
 
 Mechanism is as follow:
 
-1. Deposit DAI in AAVE
-2. Deposit amDai in camDai Vault (QiDaoProtocol)
-3. Deposit camDai as collateral in Vault (QiDaoProtocol)
-4. Borrow MAI
-5. Swap MAI for DAI
-6. Repeat
+1. Take a flash-swap in DAI
+2. Deposit DAI in AAVE
+3. Deposit amDai in camDai Vault (QiDaoProtocol)
+4. Deposit camDai as collateral in Vault (QiDaoProtocol)
+5. Borrow MAI
+6. Swap MAI for DAI
+7. Pay flash-swap
 
 This tool is a `Instadapp style` protocol, you can call `createNew()` function to create a new contract that only your account (`msg.sender`) can manage.
 
